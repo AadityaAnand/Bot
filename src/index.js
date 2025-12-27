@@ -1,6 +1,8 @@
 import 'dotenv/config';
-import { Client, LocalAuth } from 'whatsapp-web.js';
-import qrcode from 'qrcode-terminal';
+import pkg from 'whatsapp-web.js';
+const { Client, LocalAuth } = pkg;
+import qrcodeTerminal from 'qrcode-terminal';
+import QRCode from 'qrcode';
 import cron from 'node-cron';
 import { initializePlaid } from './services/plaid.js';
 import { analyzeSpending, checkRecentTransactions } from './services/spending.js';
@@ -20,9 +22,29 @@ const client = new Client({
 });
 
 // QR Code for authentication
-client.on('qr', (qr) => {
-    console.log('📱 Scan this QR code with WhatsApp:\n');
-    qrcode.generate(qr, { small: true });
+client.on('qr', async (qr) => {
+    console.log('📱 Generating QR code...\n');
+
+    // Save QR code as image
+    try {
+        await QRCode.toFile('whatsapp-qr.png', qr, {
+            width: 400,
+            margin: 2
+        });
+        console.log('✅ QR Code saved to: whatsapp-qr.png');
+        console.log('📱 Open whatsapp-qr.png and scan it with WhatsApp on your phone!\n');
+        console.log('   Steps:');
+        console.log('   1. Open whatsapp-qr.png file');
+        console.log('   2. Open WhatsApp on your phone');
+        console.log('   3. Go to Settings → Linked Devices');
+        console.log('   4. Tap "Link a Device"');
+        console.log('   5. Scan the QR code from whatsapp-qr.png\n');
+    } catch (error) {
+        console.error('Error generating QR code image:', error);
+    }
+
+    // Also show in terminal (if it works)
+    qrcodeTerminal.generate(qr, { small: true });
 });
 
 // Ready event
