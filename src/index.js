@@ -61,7 +61,36 @@ client.on('ready', async () => {
 
 // Handle incoming messages
 client.on('message', async (message) => {
+    console.log('🎯 MESSAGE EVENT TRIGGERED!');
+    console.log('   From:', message.from);
+    console.log('   Body:', message.body);
+    console.log('   Type:', message.type);
     await handleMessage(client, message);
+});
+
+// Track last processed message to prevent loops
+let lastProcessedMessageId = null;
+
+// Handle messages you send (including to yourself)
+client.on('message_create', async (message) => {
+    console.log('🎯 MESSAGE_CREATE EVENT TRIGGERED!');
+    console.log('   From:', message.from);
+    console.log('   To:', message.to);
+    console.log('   Body:', message.body);
+    console.log('   Type:', message.type);
+
+    // Prevent processing the same message twice
+    if (message.id._serialized === lastProcessedMessageId) {
+        console.log('   ⏭️  Skipping already processed message');
+        return;
+    }
+
+    // Only process if it's from you to yourself or in a group
+    if (message.fromMe) {
+        console.log('   This is YOUR message, processing...');
+        lastProcessedMessageId = message.id._serialized;
+        await handleMessage(client, message);
+    }
 });
 
 // Error handling

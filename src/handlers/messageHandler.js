@@ -11,16 +11,62 @@ const userMessageHistory = [];
  * @param {Object} client - WhatsApp client
  * @param {Object} message - WhatsApp message object
  */
+// Track bot's own responses to avoid infinite loops
+const botResponses = new Set();
+
 export async function handleMessage(client, message) {
     try {
-        // Only respond to authorized user
+        // If this is a message from you (fromMe = true), process it
+        if (message.fromMe) {
+            const messageBody = message.body.trim();
+
+            // Skip if this is a bot response we just sent
+            if (botResponses.has(messageBody)) {
+                console.log('🤖 Skipping bot\'s own response');
+                botResponses.delete(messageBody); // Clean up
+                return;
+            }
+
+            console.log('✅ Processing your own message');
+            console.log(`📨 Your message: "${messageBody}"`);
+
+            // Check for commands and respond
+            const response = await processCommand(messageBody, client);
+            if (response) {
+                // Add bot prefix so you can tell it's the bot responding
+                const botResponse = `🤖 ${response}`;
+
+                // Track this response to avoid processing it again
+                botResponses.add(botResponse);
+
+                // Send to the same chat
+                await message.reply(botResponse);
+                console.log(`✅ Sent: "${botResponse.substring(0, 50)}..."`);
+
+                // Clean up old responses (keep last 10)
+                if (botResponses.size > 10) {
+                    const arr = Array.from(botResponses);
+                    botResponses.clear();
+                    arr.slice(-10).forEach(r => botResponses.add(r));
+                }
+            }
+            return;
+        }
+
+        // Otherwise, check if it's from authorized user
         const authorizedNumber = process.env.AUTHORIZED_USER_NUMBER;
         if (!authorizedNumber) {
             console.log('⚠️  No authorized user configured');
             return;
         }
 
-        const senderNumber = message.from.replace('@c.us', '');
+        // Debug: Show what we're receiving
+        console.log(`🔍 Message from: ${message.from}`);
+        console.log(`🔍 Authorized number: ${authorizedNumber}`);
+
+        const senderNumber = message.from.replace('@c.us', '').replace('@g.us', '');
+        console.log(`🔍 Cleaned sender: ${senderNumber}`);
+
         if (senderNumber !== authorizedNumber) {
             console.log(`🚫 Ignoring message from unauthorized number: ${senderNumber}`);
             return;
