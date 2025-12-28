@@ -2,6 +2,8 @@ import { generateResponse, analyzeTextingStyle, resetContext } from '../services
 import { analyzeSpending, getSpendingSummary, analyzeSpendingTrends } from '../services/spending.js';
 import { checkSocialMediaUsage, logUsage, getPlatformUsage } from '../services/socialMedia.js';
 import { getBalances } from '../services/plaid.js';
+import { setBudget, getBudgetSummary, checkBudget } from '../services/budget.js';
+import { createReminder, deleteReminder, getReminderSummary } from '../services/reminders.js';
 
 // Store user messages for style analysis
 const userMessageHistory = [];
@@ -125,6 +127,16 @@ async function processCommand(messageBody, client) {
         return await handleSocialMediaQuery();
     }
 
+    // Budget commands
+    if (lower.includes('budget')) {
+        return await handleBudgetCommand(messageBody);
+    }
+
+    // Reminder commands
+    if (lower.includes('remind') || lower.includes('reminder')) {
+        return handleReminderCommand(messageBody);
+    }
+
     // Log social media usage manually
     if (lower.startsWith('log ')) {
         return handleLogUsage(messageBody);
@@ -161,11 +173,20 @@ function getHelpMessage() {
 💰 Finance:
 - "spending" - See spending summary
 - "balance" - Check account balances
+- "budget" - View all budgets
+- "set budget [period] [amount]" - Set budget
+  Example: "set budget daily 50"
 
 📱 Social Media:
 - "social media" - Usage summary
 - "log [platform] [minutes]" - Log usage
   Example: "log instagram 45"
+
+⏰ Reminders:
+- "remind me [message] at [time]" - Set reminder
+  Example: "remind me workout at 18:00"
+- "reminders" - View all reminders
+- "delete reminder [id]" - Delete a reminder
 
 🤖 Bot Commands:
 - "learn my style" - Analyze your texting
@@ -290,6 +311,122 @@ function handleLogUsage(message) {
     } else {
         return `❌ ${result.error}`;
     }
+}
+
+/**
+ * Handle budget commands
+ * @param {string} message - Budget command
+ * @returns {Promise<string>} - Response message
+ */
+async function handleBudgetCommand(message) {
+    const lower = message.toLowerCase();
+
+    // Set budget command
+    if (lower.startsWith('set budget')) {
+        // Parse: "set budget daily 50" or "set budget entertainment 100"
+        const parts = message.split(' ');
+
+        if (parts.length < 4) {
+            return "Usage: set budget [period/category] [amount]\nExample: set budget daily 50";
+        }
+
+        const period = parts[2].toLowerCase();
+        const amount = parseFloat(parts[3]);
+
+        if (isNaN(amount) || amount <= 0) {
+            return "Amount must be a positive number!";
+        }
+
+        setBudget(period, amount);
+        return `✅ Set ${period} budget to $${amount.toFixed(2)}`;
+    }
+
+    // Check specific budget
+    if (lower.includes('daily budget') || lower.includes('weekly budget') || lower.includes('monthly budget')) {
+        let period = 'daily';
+        if (lower.includes('weekly')) period = 'weekly';
+        if (lower.includes('monthly')) period = 'monthly';
+
+        const status = await checkBudget(period);
+
+        if (status.status === 'no_budget_set') {
+            return `No ${period} budget set. Use "set budget ${period} [amount]" to create one.`;
+        }
+
+        const emoji = status.status === 'over_budget' ? '🔴' : status.status === 'warning' ? '🟡' : '🟢';
+        return `${emoji} ${period.charAt(0).toUpperCase() + period.slice(1)} Budget:\n` +
+               `Spent: $${status.spent.toFixed(2)} / $${status.budget}\n` +
+               `Remaining: $${status.remaining.toFixed(2)}\n` +
+               `Used: ${status.percentUsed}%`;
+    }
+
+    // Show all budgets
+    return await getBudgetSummary();
+}
+
+/**
+ * Handle reminder commands
+ * @param {string} message - Reminder command
+ * @returns {string} - Response message
+ */
+function handleReminderCommand(message) {
+    const lower = message.toLowerCase();
+
+    // List reminders
+    if (lower === 'reminders' || lower === 'list reminders' || lower === 'show reminders') {
+        return getReminderSummary();
+    }
+
+    // Delete reminder
+    if (lower.startsWith('delete reminder')) {
+        const parts = message.split(' ');
+        const id = parseInt(parts[2]);
+
+        if (isNaN(id)) {
+            return "Usage: delete reminder [id]\nExample: delete reminder 1";
+        }
+
+        const success = deleteReminder(id);
+        if (success) {
+            return `✅ Deleted reminder #${id}`;
+        } else {
+            return `❌ Reminder #${id} not found`;
+        }
+    }
+
+    // Create reminder - "remind me [message] at [time]"
+    if (lower.startsWith('remind me')) {
+        const match = message.match(/remind me (.+) at (\d{1,2}:\d{2})/i);
+
+        if (!match) {
+            return "Usage: remind me [message] at [time]\nExample: remind me workout at 18:00\nTime format: HH:MM (24-hour)";
+        }
+
+        const reminderMessage = match[1].trim();
+        const time = match[2];
+
+        try {
+            // Check if it includes frequency
+            let frequency = 'once';
+            if (lower.includes('daily') || lower.includes('every day')) {
+                frequency = 'daily';
+            } else if (lower.includes('weekly') || lower.includes('every week')) {
+                frequency = 'weekly';
+            }
+
+            createReminder(reminderMessage, time, frequency);
+
+            return `✅ Reminder set!\n` +
+                   `Message: ${reminderMessage}\n` +
+                   `Time: ${time}\n` +
+                   `Frequency: ${frequency}\n\n` +
+                   `Note: Restart the bot for the reminder to activate.`;
+        } catch (error) {
+            return `❌ Error: ${error.message}`;
+        }
+    }
+
+    return "Try: 'remind me [message] at [time]' or 'reminders' to view all";
 }
 
 export { userMessageHistory };

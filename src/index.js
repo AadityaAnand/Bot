@@ -9,6 +9,8 @@ import { analyzeSpending, checkRecentTransactions } from './services/spending.js
 import { checkSocialMediaUsage } from './services/socialMedia.js';
 import { generateResponse } from './services/personality.js';
 import { handleMessage } from './handlers/messageHandler.js';
+import { checkBudgetAlerts } from './services/budget.js';
+import { startReminders } from './services/reminders.js';
 
 console.log('🤖 Starting Personal Assistant Bot...\n');
 
@@ -54,6 +56,9 @@ client.on('ready', async () => {
 
     // Initialize services
     await initializePlaid();
+
+    // Start reminders
+    startReminders(client);
 
     // Schedule periodic checks
     scheduleMonitoring(client);
@@ -104,10 +109,11 @@ client.on('disconnected', (reason) => {
 
 // Schedule monitoring tasks
 function scheduleMonitoring(client) {
-    // Check spending every hour
+    // Check spending and budget every hour
     cron.schedule('0 * * * *', async () => {
-        console.log('💰 Running spending check...');
+        console.log('💰 Running spending and budget check...');
         await checkRecentTransactions(client);
+        await checkBudgetAlerts(client);
     });
 
     // Check social media usage every 2 hours during waking hours (8am - 11pm)
@@ -116,17 +122,41 @@ function scheduleMonitoring(client) {
         await checkSocialMediaUsage(client);
     });
 
-    // Daily summary at 9 PM
+    // Morning motivation - 8 AM
+    cron.schedule('0 8 * * *', async () => {
+        console.log('☀️ Sending morning motivation...');
+        const motivation = await generateResponse("Send a short, sassy morning motivation message to start the day strong. Keep it under 2 sentences.");
+        await sendToUser(client, `🤖 ${motivation}`);
+    });
+
+    // Midday check-in - 12 PM
+    cron.schedule('0 12 * * *', async () => {
+        console.log('🌞 Sending midday check-in...');
+        const checkIn = await generateResponse("Send a quick midday check-in. Ask how their morning went and remind them to stay focused. Keep it brief and sassy.");
+        await sendToUser(client, `🤖 ${checkIn}`);
+    });
+
+    // Evening wind-down reminder - 9 PM
     cron.schedule('0 21 * * *', async () => {
+        console.log('🌙 Sending evening reminder...');
+        const reminder = await generateResponse("Remind them to start winding down, prep for tomorrow, and get good sleep. Be supportive but firm about self-care.");
+        await sendToUser(client, `🤖 ${reminder}`);
+    });
+
+    // Daily summary - 10 PM
+    cron.schedule('0 22 * * *', async () => {
         console.log('📊 Generating daily summary...');
         const summary = await generateDailySummary();
-        await sendToUser(client, summary);
+        await sendToUser(client, `🤖 ${summary}`);
     });
 
     console.log('⏰ Monitoring schedules set up:');
     console.log('   - Spending checks: Every hour');
     console.log('   - Social media checks: Every 2 hours (8am-11pm)');
-    console.log('   - Daily summary: 9 PM\n');
+    console.log('   - Morning motivation: 8 AM');
+    console.log('   - Midday check-in: 12 PM');
+    console.log('   - Evening wind-down: 9 PM');
+    console.log('   - Daily summary: 10 PM\n');
 }
 
 // Send message to authorized user
