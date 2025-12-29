@@ -6,11 +6,12 @@ import QRCode from 'qrcode';
 import cron from 'node-cron';
 import { initializePlaid } from './services/plaid.js';
 import { analyzeSpending, checkRecentTransactions } from './services/spending.js';
-import { checkSocialMediaUsage } from './services/socialMedia.js';
 import { generateResponse } from './services/personality.js';
 import { handleMessage } from './handlers/messageHandler.js';
 import { checkBudgetAlerts } from './services/budget.js';
 import { startReminders } from './services/reminders.js';
+import { initializeGmail, checkImportantEmails } from './services/gmail.js';
+import { generateDailySummary as generateActivityDailySummary, generateWeeklySummary, cleanOldActivities } from './services/activity.js';
 
 console.log('🤖 Starting Personal Assistant Bot...\n');
 
@@ -56,6 +57,7 @@ client.on('ready', async () => {
 
     // Initialize services
     await initializePlaid();
+    await initializeGmail();
 
     // Start reminders
     startReminders(client);
@@ -116,10 +118,10 @@ function scheduleMonitoring(client) {
         await checkBudgetAlerts(client);
     });
 
-    // Check social media usage every 2 hours during waking hours (8am - 11pm)
-    cron.schedule('0 8-23/2 * * *', async () => {
-        console.log('📱 Running social media usage check...');
-        await checkSocialMediaUsage(client);
+    // Check important emails every 2 hours (9am-9pm)
+    cron.schedule('0 9-21/2 * * *', async () => {
+        console.log('📧 Checking important emails...');
+        await checkImportantEmails(client);
     });
 
     // Morning motivation - 8 AM
@@ -147,16 +149,31 @@ function scheduleMonitoring(client) {
     cron.schedule('0 22 * * *', async () => {
         console.log('📊 Generating daily summary...');
         const summary = await generateDailySummary();
-        await sendToUser(client, `🤖 ${summary}`);
+        await sendToUser(client, summary);
+    });
+
+    // Weekly summary - Sunday at 8 PM
+    cron.schedule('0 20 * * 0', async () => {
+        console.log('📅 Generating weekly summary...');
+        const summary = generateWeeklySummary();
+        await sendToUser(client, summary);
+    });
+
+    // Clean old activities - Daily at 2 AM
+    cron.schedule('0 2 * * *', async () => {
+        console.log('🧹 Cleaning old activities...');
+        cleanOldActivities();
     });
 
     console.log('⏰ Monitoring schedules set up:');
     console.log('   - Spending checks: Every hour');
-    console.log('   - Social media checks: Every 2 hours (8am-11pm)');
+    console.log('   - Email checks: Every 2 hours (9am-9pm)');
     console.log('   - Morning motivation: 8 AM');
     console.log('   - Midday check-in: 12 PM');
     console.log('   - Evening wind-down: 9 PM');
-    console.log('   - Daily summary: 10 PM\n');
+    console.log('   - Daily summary: 10 PM');
+    console.log('   - Weekly summary: Sunday 8 PM');
+    console.log('   - Data cleanup: Daily 2 AM\n');
 }
 
 // Send message to authorized user
@@ -178,14 +195,14 @@ async function sendToUser(client, message) {
 // Generate daily summary
 async function generateDailySummary() {
     const spendingSummary = await analyzeSpending();
-    const socialMediaSummary = await checkSocialMediaUsage(null, true);
+    const activitySummary = generateActivityDailySummary();
 
     const prompt = `Generate a sassy, passionate daily summary based on this data:
 
+Activity Today: ${activitySummary}
 Spending: ${spendingSummary}
-Social Media: ${socialMediaSummary}
 
-Be honest and direct. If I wasted time or money, call me out. If I did well, be proud. Keep it real and conversational.`;
+Be honest and direct. Call out any lazy or wasteful behavior. If they did well, show pride. Keep it real and conversational.`;
 
     return await generateResponse(prompt);
 }

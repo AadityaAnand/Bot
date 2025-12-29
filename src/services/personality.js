@@ -1,10 +1,15 @@
 import { Ollama } from 'ollama';
+import fs from 'fs';
+import path from 'path';
 
 const ollama = new Ollama({
     host: process.env.OLLAMA_BASE_URL || 'http://localhost:11434'
 });
 
 const model = process.env.OLLAMA_MODEL || 'llama3.2';
+
+// File to store learned style
+const STYLE_FILE = path.join(process.cwd(), 'data', 'user-style.json');
 
 // System prompt that defines the bot's personality
 const SYSTEM_PROMPT = `You are a sassy, no-nonsense personal assistant with a sharp tongue and a big heart. Think of yourself as a tough-love best friend who won't let your user settle for mediocrity.
@@ -36,6 +41,43 @@ Your job is to:
 Remember: You care deeply, so your sass comes from a place of love. You want them to be their best self, and you're not afraid to push them there.`;
 
 let conversationHistory = [];
+let learnedStyle = null;
+
+/**
+ * Load learned style from file
+ */
+function loadLearnedStyle() {
+    try {
+        if (fs.existsSync(STYLE_FILE)) {
+            const data = fs.readFileSync(STYLE_FILE, 'utf8');
+            learnedStyle = JSON.parse(data);
+            console.log('✅ Loaded learned texting style');
+        }
+    } catch (error) {
+        console.error('Error loading learned style:', error.message);
+    }
+}
+
+/**
+ * Save learned style to file
+ */
+function saveLearnedStyle(styleData) {
+    try {
+        // Create data directory if it doesn't exist
+        const dataDir = path.dirname(STYLE_FILE);
+        if (!fs.existsSync(dataDir)) {
+            fs.mkdirSync(dataDir, { recursive: true });
+        }
+
+        fs.writeFileSync(STYLE_FILE, JSON.stringify(styleData, null, 2), 'utf8');
+        console.log('✅ Saved learned texting style');
+    } catch (error) {
+        console.error('Error saving learned style:', error.message);
+    }
+}
+
+// Load style on startup
+loadLearnedStyle();
 
 /**
  * Generate a response using Ollama
@@ -54,10 +96,16 @@ export async function generateResponse(userMessage, resetContext = false) {
             content: userMessage
         });
 
+        // Build system prompt with learned style if available
+        let systemPrompt = SYSTEM_PROMPT;
+        if (learnedStyle) {
+            systemPrompt += `\n\n${learnedStyle.styleInstructions}`;
+        }
+
         const response = await ollama.chat({
             model: model,
             messages: [
-                { role: 'system', content: SYSTEM_PROMPT },
+                { role: 'system', content: systemPrompt },
                 ...conversationHistory
             ],
             stream: false
@@ -94,24 +142,54 @@ export async function generateResponse(userMessage, resetContext = false) {
 /**
  * Analyze user's texting style from message history
  * @param {Array} messages - Array of user messages
- * @returns {string} - Style analysis prompt
+ * @returns {Promise<string>} - Style analysis result
  */
-export function analyzeTextingStyle(messages) {
+export async function analyzeTextingStyle(messages) {
     const sampleMessages = messages.slice(-50).join('\n');
 
-    return `Analyze this user's texting style and mimic it exactly:
+    const analysisPrompt = `Analyze this user's texting style and create detailed instructions for mimicking it:
 
 ${sampleMessages}
 
-Note their:
-- Sentence structure
+Based on these messages, describe their texting style in detail:
+- Sentence structure and length
 - Use of punctuation
 - Capitalization patterns
-- Common phrases
-- Emoji usage
+- Common phrases and expressions
+- Emoji usage patterns
 - Slang or abbreviations
+- Overall tone and personality
 
-Adopt their exact style in all future responses.`;
+Provide clear instructions on how to match this style exactly.`;
+
+    try {
+        // Ask AI to analyze the style
+        const response = await ollama.chat({
+            model: model,
+            messages: [
+                { role: 'user', content: analysisPrompt }
+            ],
+            stream: false
+        });
+
+        const styleInstructions = response.message.content;
+
+        // Save the learned style
+        const styleData = {
+            learnedAt: new Date().toISOString(),
+            sampleSize: messages.length,
+            styleInstructions: styleInstructions
+        };
+
+        learnedStyle = styleData;
+        saveLearnedStyle(styleData);
+
+        return styleInstructions;
+
+    } catch (error) {
+        console.error('Error analyzing texting style:', error.message);
+        return 'Error analyzing your texting style. Try again?';
+    }
 }
 
 /**

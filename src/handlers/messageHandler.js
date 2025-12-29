@@ -1,9 +1,10 @@
 import { generateResponse, analyzeTextingStyle, resetContext } from '../services/personality.js';
 import { analyzeSpending, getSpendingSummary, analyzeSpendingTrends } from '../services/spending.js';
-import { checkSocialMediaUsage, logUsage, getPlatformUsage } from '../services/socialMedia.js';
 import { getBalances } from '../services/plaid.js';
 import { setBudget, getBudgetSummary, checkBudget } from '../services/budget.js';
 import { createReminder, deleteReminder, getReminderSummary } from '../services/reminders.js';
+import { logActivity, getTodayActivities, generateDailySummary, generateWeeklySummary } from '../services/activity.js';
+import { getImportantEmails } from '../services/gmail.js';
 
 // Store user messages for style analysis
 const userMessageHistory = [];
@@ -27,6 +28,20 @@ export async function handleMessage(client, message) {
                 console.log('🤖 Skipping bot\'s own response');
                 botResponses.delete(messageBody); // Clean up
                 return;
+            }
+
+            // Check if we should only respond in a specific chat
+            const botChatId = process.env.BOT_CHAT_ID;
+            if (botChatId && botChatId.trim() !== '') {
+                // Only respond in the designated chat
+                // Use 'to' field for groups, 'from' for direct messages
+                const currentChatId = message.to || message.from;
+                console.log(`🔍 Current chat: ${currentChatId}, Allowed chat: ${botChatId}`);
+
+                if (currentChatId !== botChatId) {
+                    console.log('⏭️  Skipping - not in designated bot chat');
+                    return;
+                }
             }
 
             console.log('✅ Processing your own message');
@@ -122,9 +137,24 @@ async function processCommand(messageBody, client) {
         return await handleBalanceQuery();
     }
 
-    // Social media commands
-    if (lower.includes('social media') || lower.includes('screen time')) {
-        return await handleSocialMediaQuery();
+    // Activity logging commands
+    if (lower.includes('worked on') || lower.includes('meeting with') || lower.includes('did ')) {
+        return handleActivityLog(messageBody);
+    }
+
+    // Daily summary
+    if (lower.includes('daily summary') || lower === 'summary') {
+        return generateDailySummary();
+    }
+
+    // Weekly summary
+    if (lower.includes('weekly summary') || lower === 'week summary') {
+        return generateWeeklySummary();
+    }
+
+    // Email check
+    if (lower.includes('check email') || lower.includes('important email')) {
+        return await handleEmailCheck();
     }
 
     // Budget commands
@@ -135,11 +165,6 @@ async function processCommand(messageBody, client) {
     // Reminder commands
     if (lower.includes('remind') || lower.includes('reminder')) {
         return handleReminderCommand(messageBody);
-    }
-
-    // Log social media usage manually
-    if (lower.startsWith('log ')) {
-        return handleLogUsage(messageBody);
     }
 
     // Reset conversation context
@@ -170,17 +195,23 @@ async function processCommand(messageBody, client) {
 function getHelpMessage() {
     return `Hey! Here's what I can do:
 
+📊 Productivity:
+- Just tell me what you did! I'll log it
+  Example: "worked on project X for 2 hours"
+  Example: "meeting with the team"
+- "summary" or "daily summary" - Today's recap
+- "weekly summary" - This week's overview
+
+📧 Email:
+- "check email" - See important emails only
+- Auto-checks every 2 hours (9am-9pm)
+
 💰 Finance:
 - "spending" - See spending summary
 - "balance" - Check account balances
 - "budget" - View all budgets
 - "set budget [period] [amount]" - Set budget
   Example: "set budget daily 50"
-
-📱 Social Media:
-- "social media" - Usage summary
-- "log [platform] [minutes]" - Log usage
-  Example: "log instagram 45"
 
 ⏰ Reminders:
 - "remind me [message] at [time]" - Set reminder
@@ -193,7 +224,7 @@ function getHelpMessage() {
 - "reset" - Clear conversation history
 - "help" - This message
 
-Just chat with me normally and I'll keep you accountable!`;
+Just chat naturally! I'll track everything and keep you accountable.`;
 }
 
 /**
@@ -271,45 +302,45 @@ async function handleBalanceQuery() {
 }
 
 /**
- * Handle social media queries
- * @returns {Promise<string>} - Response
+ * Handle activity logging
+ * @param {string} message - Activity message
+ * @returns {string} - Confirmation message
  */
-async function handleSocialMediaQuery() {
-    const summary = await checkSocialMediaUsage(null, true);
-    return `📱 ${summary}`;
+function handleActivityLog(message) {
+    // Use AI to extract activity details
+    // For now, just log the whole message as activity
+    logActivity(message);
+
+    return `✅ Activity logged! I'll include this in your daily summary.`;
 }
 
 /**
- * Handle manual usage logging
- * @param {string} message - Log command
- * @returns {string} - Confirmation message
+ * Check important emails
+ * @returns {Promise<string>} - Email summary
  */
-function handleLogUsage(message) {
-    // Parse: "log instagram 45" or "log tiktok 30"
-    const parts = message.toLowerCase().split(' ');
+async function handleEmailCheck() {
+    try {
+        const emails = await getImportantEmails();
 
-    if (parts.length < 3) {
-        return "Usage: log [platform] [minutes]\nExample: log instagram 45";
-    }
+        if (emails.length === 0) {
+            return "📧 No important emails right now. You're all caught up!";
+        }
 
-    const platform = parts[1];
-    const minutes = parseInt(parts[2]);
+        let response = `📧 You have ${emails.length} important email${emails.length > 1 ? 's' : ''}:\n\n`;
 
-    if (isNaN(minutes)) {
-        return "Minutes must be a number!";
-    }
+        for (const email of emails.slice(0, 5)) {
+            response += `*From:* ${email.from}\n`;
+            response += `*Subject:* ${email.subject}\n`;
+            response += `_${email.snippet}_\n\n`;
+        }
 
-    const validPlatforms = ['instagram', 'twitter', 'tiktok', 'youtube'];
-    if (!validPlatforms.includes(platform)) {
-        return `Unknown platform. Use: ${validPlatforms.join(', ')}`;
-    }
+        if (emails.length > 5) {
+            response += `_...and ${emails.length - 5} more_`;
+        }
 
-    const result = logUsage(platform, minutes);
-
-    if (result.logged) {
-        return `✅ Logged ${minutes} min on ${platform}. Total today: ${result.totalHours.toFixed(1)}h`;
-    } else {
-        return `❌ ${result.error}`;
+        return response;
+    } catch (error) {
+        return "📧 Couldn't check emails. Make sure Gmail is set up! Run: node src/scripts/authorize-gmail.js";
     }
 }
 
@@ -394,12 +425,42 @@ function handleReminderCommand(message) {
         }
     }
 
+    // Create interval reminder - "remind me [message] every [N] hours from [start] to [end]"
+    const intervalMatch = message.match(/remind me (.+) every (\d+) hours? from (\d{1,2}:\d{2}) to (\d{1,2}:\d{2})/i);
+    if (intervalMatch) {
+        const reminderMessage = intervalMatch[1].trim();
+        const intervalHours = parseInt(intervalMatch[2]);
+        const startTime = intervalMatch[3];
+        const endTime = intervalMatch[4];
+
+        try {
+            createReminder(reminderMessage, 'interval', 'interval', null, {
+                startTime,
+                endTime,
+                intervalHours
+            });
+
+            return `✅ Interval reminder set!\n` +
+                   `Message: ${reminderMessage}\n` +
+                   `Every: ${intervalHours} hour(s)\n` +
+                   `From: ${startTime} to ${endTime}\n` +
+                   `Active immediately!`;
+        } catch (error) {
+            return `❌ Error: ${error.message}`;
+        }
+    }
+
     // Create reminder - "remind me [message] at [time]"
     if (lower.startsWith('remind me')) {
         const match = message.match(/remind me (.+) at (\d{1,2}:\d{2})/i);
 
         if (!match) {
-            return "Usage: remind me [message] at [time]\nExample: remind me workout at 18:00\nTime format: HH:MM (24-hour)";
+            return "Usage:\n" +
+                   "remind me [message] at [time]\n" +
+                   "remind me [message] every [N] hours from [start] to [end]\n\n" +
+                   "Examples:\n" +
+                   "remind me workout at 18:00\n" +
+                   "remind me walk every 1 hour from 10:00 to 20:00";
         }
 
         const reminderMessage = match[1].trim();
@@ -419,14 +480,17 @@ function handleReminderCommand(message) {
             return `✅ Reminder set!\n` +
                    `Message: ${reminderMessage}\n` +
                    `Time: ${time}\n` +
-                   `Frequency: ${frequency}\n\n` +
-                   `Note: Restart the bot for the reminder to activate.`;
+                   `Frequency: ${frequency}\n` +
+                   `Active immediately!`;
         } catch (error) {
             return `❌ Error: ${error.message}`;
         }
     }
 
-    return "Try: 'remind me [message] at [time]' or 'reminders' to view all";
+    return "Try:\n" +
+           "'remind me [message] at [time]'\n" +
+           "'remind me [message] every [N] hours from [start] to [end]'\n" +
+           "'reminders' to view all";
 }
 
 export { userMessageHistory };
