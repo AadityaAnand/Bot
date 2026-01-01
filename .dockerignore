@@ -1,0 +1,15 @@
+node_modules/
+.git/
+.gitignore
+.env
+.wwebjs_auth/
+.wwebjs_cache/
+whatsapp-qr.png
+logs/
+*.log
+.DS_Store
+data/
+README.md
+*.md
+setup-autostart.sh
+ecosystem.config.cjs
