@@ -28,25 +28,45 @@ const client = new Client({
 client.on('qr', async (qr) => {
     console.log('📱 Generating QR code...\n');
 
-    // Save QR code as image
+    // Generate QR code as Data URL (works in Railway logs!)
+    try {
+        const qrDataURL = await QRCode.toDataURL(qr, {
+            width: 400,
+            margin: 2,
+            color: {
+                dark: '#000000',
+                light: '#FFFFFF'
+            }
+        });
+
+        console.log('✅ QR Code generated successfully!\n');
+        console.log('🔗 SCAN THIS QR CODE:\n');
+        console.log('Copy this entire URL and paste it in your browser:\n');
+        console.log(qrDataURL);
+        console.log('\n📱 Steps to scan:');
+        console.log('   1. Copy the long data:image/png;base64... URL above');
+        console.log('   2. Paste it in your browser address bar and press Enter');
+        console.log('   3. The QR code will display in your browser');
+        console.log('   4. Open WhatsApp on your phone');
+        console.log('   5. Go to Settings → Linked Devices → Link a Device');
+        console.log('   6. Scan the QR code from your browser\n');
+    } catch (error) {
+        console.error('Error generating QR code:', error);
+    }
+
+    // Also save as file (for local use)
     try {
         await QRCode.toFile('whatsapp-qr.png', qr, {
             width: 400,
             margin: 2
         });
-        console.log('✅ QR Code saved to: whatsapp-qr.png');
-        console.log('📱 Open whatsapp-qr.png and scan it with WhatsApp on your phone!\n');
-        console.log('   Steps:');
-        console.log('   1. Open whatsapp-qr.png file');
-        console.log('   2. Open WhatsApp on your phone');
-        console.log('   3. Go to Settings → Linked Devices');
-        console.log('   4. Tap "Link a Device"');
-        console.log('   5. Scan the QR code from whatsapp-qr.png\n');
+        console.log('📁 QR Code also saved to: whatsapp-qr.png\n');
     } catch (error) {
-        console.error('Error generating QR code image:', error);
+        // Ignore file save errors in cloud environment
     }
 
-    // Also show in terminal (if it works)
+    // Show terminal QR (backup method)
+    console.log('📱 Terminal QR Code (backup - try to scan from screen):\n');
     qrcodeTerminal.generate(qr, { small: true });
 });
 
