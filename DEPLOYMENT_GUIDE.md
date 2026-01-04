@@ -38,10 +38,9 @@ After deployment starts, go to your project:
 3. Click **+ New Variable** and add these:
 
 **Required:**
-- `ANTHROPIC_API_KEY` - Your Claude API key (from .env file)
-- `YOUR_PHONE_NUMBER` - Your WhatsApp number (from .env file)
-- `BOT_PHONE_NUMBER` - Bot's WhatsApp number (from .env file)
-- `ALLOWED_CHAT_ID` - Your WhatsApp group chat ID (from .env file)
+- `GEMINI_API_KEY` - Your Google Gemini API key (REDACTED-GEMINI-API-KEY)
+- `BOT_CHAT_ID` - Your WhatsApp group chat ID (120363422242989040@g.us)
+- `AUTHORIZED_USER_NUMBER` - Your authorized user number (12409359669)
 
 **Optional (if you set them up):**
 - `PLAID_CLIENT_ID` - Your Plaid client ID

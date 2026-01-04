@@ -1,12 +1,17 @@
-import { Ollama } from 'ollama';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import fs from 'fs';
 import path from 'path';
 
-const ollama = new Ollama({
-    host: process.env.OLLAMA_BASE_URL || 'http://localhost:11434'
+// Initialize Gemini
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const model = genAI.getGenerativeModel({
+    model: 'gemini-1.5-flash',
+    generationConfig: {
+        temperature: 0.9,
+        topP: 0.95,
+        maxOutputTokens: 200,
+    }
 });
-
-const model = process.env.OLLAMA_MODEL || 'llama3.2';
 
 // File to store learned style
 const STYLE_FILE = path.join(process.cwd(), 'data', 'user-style.json');
@@ -91,28 +96,33 @@ export async function generateResponse(userMessage, resetContext = false) {
     }
 
     try {
-        conversationHistory.push({
-            role: 'user',
-            content: userMessage
-        });
-
         // Build system prompt with learned style if available
         let systemPrompt = SYSTEM_PROMPT;
         if (learnedStyle) {
             systemPrompt += `\n\n${learnedStyle.styleInstructions}`;
         }
 
-        const response = await ollama.chat({
-            model: model,
-            messages: [
-                { role: 'system', content: systemPrompt },
-                ...conversationHistory
-            ],
-            stream: false
+        // Build conversation history for Gemini
+        const history = conversationHistory.map(msg => ({
+            role: msg.role === 'assistant' ? 'model' : 'user',
+            parts: [{ text: msg.content }]
+        }));
+
+        // Start chat with history
+        const chat = model.startChat({
+            history: history,
+            systemInstruction: systemPrompt
         });
 
-        const assistantMessage = response.message.content;
+        // Send message and get response
+        const result = await chat.sendMessage(userMessage);
+        const assistantMessage = result.response.text();
 
+        // Update conversation history
+        conversationHistory.push({
+            role: 'user',
+            content: userMessage
+        });
         conversationHistory.push({
             role: 'assistant',
             content: assistantMessage
@@ -128,7 +138,7 @@ export async function generateResponse(userMessage, resetContext = false) {
     } catch (error) {
         console.error('Error generating response:', error.message);
 
-        // Fallback responses if Ollama fails
+        // Fallback responses if Gemini fails
         const fallbacks = [
             "Yo, my brain's lagging rn. Can you repeat that?",
             "Hold up, I'm having a moment. Try again?",
@@ -164,15 +174,8 @@ Provide clear instructions on how to match this style exactly.`;
 
     try {
         // Ask AI to analyze the style
-        const response = await ollama.chat({
-            model: model,
-            messages: [
-                { role: 'user', content: analysisPrompt }
-            ],
-            stream: false
-        });
-
-        const styleInstructions = response.message.content;
+        const result = await model.generateContent(analysisPrompt);
+        const styleInstructions = result.response.text();
 
         // Save the learned style
         const styleData = {
