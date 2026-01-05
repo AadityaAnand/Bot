@@ -4,6 +4,7 @@ const { Client, LocalAuth } = pkg;
 import qrcodeTerminal from 'qrcode-terminal';
 import QRCode from 'qrcode';
 import cron from 'node-cron';
+import express from 'express';
 import { initializePlaid } from './services/plaid.js';
 import { analyzeSpending, checkRecentTransactions } from './services/spending.js';
 import { generateResponse } from './services/personality.js';
@@ -14,6 +15,22 @@ import { initializeGmail, checkImportantEmails } from './services/gmail.js';
 import { generateDailySummary as generateActivityDailySummary, generateWeeklySummary, cleanOldActivities } from './services/activity.js';
 
 console.log('🤖 Starting Personal Assistant Bot...\n');
+
+// Create HTTP server for Render (required to stay alive)
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+app.get('/', (req, res) => {
+    res.send('WhatsApp Bot is running! 🤖');
+});
+
+app.get('/health', (req, res) => {
+    res.json({ status: 'ok', uptime: process.uptime() });
+});
+
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`🌐 HTTP server running on port ${PORT}`);
+});
 
 // Initialize WhatsApp client
 const client = new Client({
