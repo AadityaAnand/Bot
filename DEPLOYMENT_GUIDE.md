@@ -29,13 +29,29 @@ git push origin main
 3. Choose **AadityaAnand/Bot**
 4. Railway will automatically detect the Dockerfile and start building!
 
-### Step 4: Add Environment Variables
+### Step 4: Add Persistent Disk (IMPORTANT!)
+
+This prevents the bot from losing WhatsApp session and requiring QR scan every time:
+
+1. In Render dashboard, click on your service
+2. Go to **Disks** tab (left sidebar)
+3. Click **Add Disk**
+4. Configure:
+   - **Name:** `whatsapp-session`
+   - **Mount Path:** `/app/.wwebjs_auth`
+   - **Size:** 1 GB (free tier allows up to 1GB)
+5. Click **Create Disk**
+6. Wait for service to redeploy
+
+**This is critical** - without persistent disk, you'll need to scan QR code every time the container restarts!
+
+### Step 5: Add Environment Variables
 
 After deployment starts, go to your project:
 
 1. Click on your service
-2. Go to **Variables** tab
-3. Click **+ New Variable** and add these:
+2. Go to **Environment** tab
+3. Click **Add Environment Variable** and add these:
 
 **Required:**
 - `GEMINI_API_KEY` - Your Google Gemini API key (REDACTED-GEMINI-API-KEY)
@@ -47,7 +63,7 @@ After deployment starts, go to your project:
 - `PLAID_SECRET` - Your Plaid secret key
 - `PLAID_ACCESS_TOKEN` - Your Plaid access token
 
-### Step 5: Get Your Environment Variables
+### Step 6: Get Your Environment Variables
 
 To get the values from your local .env file:
 
@@ -57,7 +73,7 @@ cat .env
 
 Copy each value and paste into Railway's variables.
 
-### Step 6: First Time Setup - Scan QR Code
+### Step 7: First Time Setup - Scan QR Code
 
 After deployment completes:
 
@@ -70,7 +86,7 @@ After deployment completes:
 
 **Note:** You might need to expand the logs or screenshot them to see the full QR code.
 
-### Step 7: Keep Bot Alive (Important!)
+### Step 8: Keep Bot Alive (Important!)
 
 Railway's free tier might pause your service after inactivity. To prevent this:
 
