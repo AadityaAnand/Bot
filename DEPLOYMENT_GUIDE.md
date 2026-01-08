@@ -55,6 +55,7 @@ After deployment starts, go to your project:
 
 **Required:**
 - `GEMINI_API_KEY` - Your Google Gemini API key (REDACTED-GEMINI-API-KEY)
+- `GEMINI_API_KEY` - Your Google Gemini API key (REDACTED - set via your .env or project secrets)
 - `BOT_CHAT_ID` - Your WhatsApp group chat ID (120363422242989040@g.us)
 - `AUTHORIZED_USER_NUMBER` - Your authorized user number (12409359669)
 
